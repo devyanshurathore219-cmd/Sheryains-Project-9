@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura - Premium Productivity Dashboard</title>
+  <meta name="description" content="A beautiful, unified personal dashboard featuring a todo list, hourly planner, habit goals, pomodoro focus timer, live weather, and daily motivation.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-night">
+  <!-- Backdrop Glow Elements for Glassmorphic Visuals -->
+  <div class="glow-orb orb-1"></div>
+  <div class="glow-orb orb-2"></div>
+  <div class="glow-orb orb-3"></div>
+  <div class="app-container">
+    <!-- Main Header (Always Visible) -->
+    <header class="main-header glass-panel">
+      <div class="header-left">
+        <h1 class="app-logo">AURA</h1>
+        <div class="datetime-widget" id="datetime-display">
+          <span class="time-text" id="time-text">00:00:00 AM</span>
+          <span class="date-text" id="date-text">Monday, July 6, 2026</span>
+        </div>
+      </div>
+      
+      <div class="header-right">
+        <!-- Weather Widget -->
+        <div class="weather-widget" id="weather-widget">
+          <div class="weather-loading" id="weather-loading">
+            <i data-lucide="loader-2" class="spin"></i>
+            <span>Locating...</span>
+          </div>
+          <div class="weather-content hidden" id="weather-content">
+            <div class="weather-main">
+              <span id="weather-icon-container"></span>
+              <span class="temp" id="weather-temp">--°C</span>
+            </div>
+            <div class="weather-details">
+              <span class="city" id="weather-city">Loading...</span>
+              <span class="desc" id="weather-desc">Clear</span>
+            </div>
+          </div>
+        </div>
+        <!-- Theme Toggle -->
+        <button id="theme-toggle" class="icon-btn glass-btn" aria-label="Toggle Theme">
+          <i data-lucide="sun" class="sun-icon"></i>
+          <i data-lucide="moon" class="moon-icon"></i>
+        </button>
+      </div>
+    </header>
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Dashboard Home Screen (Visible by default) -->
+      <section id="dashboard-home" class="view-section active">
+        <div class="welcome-banner glass-panel">
+          <h2>Welcome back, Achiever.</h2>
+          <p>Optimize your day, maintain focus, and watch your progress unfold.</p>
+        </div>
+        <div class="dashboard-grid">
+          <!-- Todo Card -->
+          <div class="card glass-panel clickable-card" data-target="todo">
+            <div class="card-icon-wrapper todo-icon">
+              <i data-lucide="check-square"></i>
+            </div>
+            <div class="card-info">
+              <h3>Todo List</h3>
+              <p>Organize your tasks by priority and log completion.</p>
+            </div>
+            <div class="card-status" id="todo-card-status">
+              <span>0 tasks remaining</span>
+            </div>
+          </div>
+          <!-- Daily Planner Card -->
+          <div class="card glass-panel clickable-card" data-target="planner">
+            <div class="card-icon-wrapper planner-icon">
+              <i data-lucide="calendar"></i>
+            </div>
+            <div class="card-info">
+              <h3>Daily Planner</h3>
+              <p>Schedule your day and stick to hourly time blocks.</p>
+            </div>
+            <div class="card-status" id="planner-card-status">
+              <span>0 slots filled</span>
+            </div>
+          </div>
+          <!-- Daily Goals Card -->
+          <div class="card glass-panel clickable-card" data-target="goals">
+            <div class="card-icon-wrapper goals-icon">
+              <i data-lucide="target"></i>
+            </div>
+            <div class="card-info">
+              <h3>Daily Goals</h3>
+              <p>Form healthy habits and complete your daily goals.</p>
+              <div class="goals-progress-mini">
+                <div class="progress-bar-container">
+                  <div class="progress-bar-fill" id="goals-progress-fill" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="card-status" id="goals-card-status">
+              <span>0% completed</span>
+            </div>
+          </div>
+          <!-- Pomodoro Timer Card -->
+          <div class="card glass-panel clickable-card" data-target="pomodoro">
+            <div class="card-icon-wrapper pomodoro-icon">
+              <i data-lucide="timer"></i>
+            </div>
+            <div class="card-info">
+              <h3>Pomodoro Timer</h3>
+              <p>Work intensely in intervals and take structured breaks.</p>
+            </div>
+            <div class="card-status" id="pomodoro-card-status">
+              <span>Ready (25:00)</span>
+            </div>
+          </div>
+          <!-- Motivation Quote Card -->
+          <div class="card glass-panel clickable-card" data-target="quotes">
+            <div class="card-icon-wrapper quote-icon">
+              <i data-lucide="quote"></i>
+            </div>
+            <div class="card-info">
+              <h3>Daily Motivation</h3>
+              <p class="quote-preview" id="quote-preview">"Loading inspiration..."</p>
+            </div>
+            <div class="card-status">
+              <span>Click to view full quote</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- Todo List Feature Container -->
+      <section id="todo-section" class="view-section glass-panel">
+        <div class="section-header">
+          <button class="back-btn glass-btn">
+            <i data-lucide="arrow-left"></i> Back to Dashboard
+          </button>
+          <h2>Todo List</h2>
+        </div>
+        <div class="section-body todo-layout">
+          <form id="todo-form" class="task-input-container">
+            <input type="text" id="todo-input" class="glass-input" placeholder="What is your next task?" required autocomplete="off">
+            <button type="submit" class="glass-btn primary-btn" id="add-task-btn">
+              <i data-lucide="plus"></i> Add Task
+            </button>
+          </form>
+          <div class="todo-filters">
+            <button type="button" class="filter-btn active" data-filter="all">All</button>
+            <button type="button" class="filter-btn" data-filter="active">Active</button>
+            <button type="button" class="filter-btn" data-filter="important">Important</button>
+            <button type="button" class="filter-btn" data-filter="completed">Completed</button>
+          </div>
+          <div class="todo-list-wrapper">
+            <ul id="todo-list" class="task-list">
+              <!-- Dynamically populated -->
+            </ul>
+            <div id="todo-empty-state" class="empty-state">
+              <i data-lucide="clipboard-list"></i>
+              <p>No tasks found. Add a task to get started!</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- Daily Planner Feature Container -->
+      <section id="planner-section" class="view-section glass-panel">
+        <div class="section-header">
+          <button class="back-btn glass-btn">
+            <i data-lucide="arrow-left"></i> Back to Dashboard
+          </button>
+          <h2>Daily Planner</h2>
+        </div>
+        <div class="section-body planner-layout">
+          <p class="planner-subtitle">Organize your time blocks. Your notes are saved automatically as you type.</p>
+          <div class="planner-timetable" id="planner-timetable">
+            <!-- Hourly blocks generated dynamically from 8 AM to 9 PM -->
+          </div>
+        </div>
+      </section>
+      <!-- Daily Goals Feature Container -->
+      <section id="goals-section" class="view-section glass-panel">
+        <div class="section-header">
+          <button class="back-btn glass-btn">
+            <i data-lucide="arrow-left"></i> Back to Dashboard
+          </button>
+          <h2>Daily Goals</h2>
+        </div>
+        <div class="section-body goals-layout">
+          <div class="goals-progress-panel glass-panel">
+            <div class="progress-details">
+              <span>Daily Completion Rate</span>
+              <span id="goals-progress-text">0 of 0 completed</span>
+            </div>
+            <div class="progress-bar-container large">
+              <div class="progress-bar-fill" id="goals-progress-fill-large" style="width: 0%"></div>
+            </div>
+          </div>
+          <form id="goals-form" class="task-input-container">
+            <input type="text" id="goal-input" class="glass-input" placeholder="Set a new daily goal (e.g., Read 10 pages)" required autocomplete="off">
+            <button type="submit" class="glass-btn primary-btn">
+              <i data-lucide="plus"></i> Add Goal
+            </button>
+          </form>
+          <div class="goals-list-wrapper">
+            <ul id="goals-list" class="task-list">
+              <!-- Dynamically populated -->
+            </ul>
+            <div id="goals-empty-state" class="empty-state">
+              <i data-lucide="sparkles"></i>
+              <p>No goals set for today. Add a goal to track your habits!</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- Pomodoro Timer Feature Container -->
+      <section id="pomodoro-section" class="view-section glass-panel">
+        <div class="section-header">
+          <button class="back-btn glass-btn">
+            <i data-lucide="arrow-left"></i> Back to Dashboard
+          </button>
+          <h2>Pomodoro Timer</h2>
+        </div>
+        <div class="section-body pomodoro-layout">
+          <div class="pomodoro-container">
+            <!-- Session indicator -->
+            <div class="timer-session-badge" id="timer-session-type">Work Session</div>
+            
+            <!-- Circular countdown visual -->
+            <div class="timer-circle">
+              <svg class="timer-svg" viewBox="0 0 100 100">
+                <circle class="timer-circle-bg" cx="50" cy="50" r="45"></circle>
+                <circle class="timer-circle-progress" id="timer-progress-ring" cx="50" cy="50" r="45"></circle>
+              </svg>
+              <div class="timer-time" id="timer-time-display">25:00</div>
+            </div>
+            <!-- Controls -->
+            <div class="timer-controls">
+              <button id="timer-start" class="timer-btn play-btn" aria-label="Start Timer">
+                <i data-lucide="play"></i>
+              </button>
+              <button id="timer-pause" class="timer-btn pause-btn hidden" aria-label="Pause Timer">
+                <i data-lucide="pause"></i>
+              </button>
+              <button id="timer-reset" class="timer-btn reset-btn" aria-label="Reset Timer">
+                <i data-lucide="rotate-ccw"></i>
+              </button>
+            </div>
+            <!-- Session Config / Modes -->
+            <div class="timer-presets">
+              <button class="preset-btn active" data-duration="1500" data-type="work">25m Work</button>
+              <button class="preset-btn" data-duration="300" data-type="break">5m Break</button>
+              <button class="preset-btn" data-duration="900" data-type="long-break">15m Long Break</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- Motivation Quote Feature Container -->
+      <section id="quotes-section" class="view-section glass-panel">
+        <div class="section-header">
+          <button class="back-btn glass-btn">
+            <i data-lucide="arrow-left"></i> Back to Dashboard
+          </button>
+          <h2>Daily Inspiration</h2>
+        </div>
+        <div class="section-body quotes-layout">
+          <div class="quote-card glass-panel">
+            <div class="quote-spinner" id="quote-loader">
+              <i data-lucide="loader-2" class="spin"></i>
+              <p>Fetching inspiring thoughts...</p>
+            </div>
+            
+            <div class="quote-content-wrapper hidden" id="quote-content-wrapper">
+              <blockquote class="quote-text" id="quote-full-text">
+                "The only way to do great work is to love what you do."
+              </blockquote>
+              <cite class="quote-author" id="quote-full-author">— Steve Jobs</cite>
+            </div>
+            <button id="new-quote-btn" class="glass-btn primary-btn quote-refresh-btn">
+              <i data-lucide="refresh-cw"></i> Get New Quote
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <footer class="main-footer">
+    <p>&copy; 2026 Aura Productivity. Crafted for ultimate focus and flow.</p>
+  </footer>
+  <!-- Web App Logic -->
+  <script src="script.js"></script>
+</body>
+</html>
