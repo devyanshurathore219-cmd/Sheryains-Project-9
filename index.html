@@ -22,7 +22,47 @@
   <div class="glow-orb orb-1"></div>
   <div class="glow-orb orb-2"></div>
   <div class="glow-orb orb-3"></div>
-  <div class="app-container">
+
+  <!-- Authentication View -->
+  <div class="auth-container hidden" id="auth-container">
+    <div class="auth-card glass-panel">
+      <div class="auth-logo">AURA</div>
+      <p class="auth-subtitle">Optimize your day, maintain focus, and watch your progress unfold.</p>
+      
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form">
+        <h3>Sign In</h3>
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" class="glass-input" required placeholder="Enter username" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" class="glass-input" required placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="glass-btn primary-btn auth-submit-btn">Login</button>
+        <p class="auth-toggle-text">Don't have an account? <a href="#" id="show-register-btn">Register</a></p>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden">
+        <h3>Create Account</h3>
+        <div class="form-group">
+          <label for="register-username">Username</label>
+          <input type="text" id="register-username" class="glass-input" required placeholder="Choose a username" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="register-password">Password</label>
+          <input type="password" id="register-password" class="glass-input" required placeholder="Minimum 6 characters" autocomplete="new-password">
+        </div>
+        <button type="submit" class="glass-btn primary-btn auth-submit-btn">Register</button>
+        <p class="auth-toggle-text">Already have an account? <a href="#" id="show-login-btn">Login</a></p>
+      </form>
+      <div class="auth-error" id="auth-error-msg"></div>
+    </div>
+  </div>
+
+  <div class="app-container" id="app-container">
     <!-- Main Header (Always Visible) -->
     <header class="main-header glass-panel">
       <div class="header-left">
@@ -50,6 +90,16 @@
               <span class="desc" id="weather-desc">Clear</span>
             </div>
           </div>
+        </div>
+        <!-- User Profile Menu -->
+        <div class="user-menu" id="user-menu-widget">
+          <span class="user-welcome">Hi, <strong id="header-username">Achiever</strong></span>
+          <button id="admin-panel-btn" class="glass-btn hidden" aria-label="Admin Panel">
+            <i data-lucide="shield"></i> Admin
+          </button>
+          <button id="logout-btn" class="icon-btn glass-btn" aria-label="Logout">
+            <i data-lucide="log-out"></i>
+          </button>
         </div>
         <!-- Theme Toggle -->
         <button id="theme-toggle" class="icon-btn glass-btn" aria-label="Toggle Theme">
@@ -288,6 +338,138 @@
             <button id="new-quote-btn" class="glass-btn primary-btn quote-refresh-btn">
               <i data-lucide="refresh-cw"></i> Get New Quote
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Admin Console Feature Container -->
+      <section id="admin-section" class="view-section glass-panel">
+        <div class="section-header">
+          <button class="back-btn glass-btn" id="admin-back-btn">
+            <i data-lucide="arrow-left"></i> Back to Dashboard
+          </button>
+          <h2>Admin Console</h2>
+        </div>
+        <div class="section-body admin-layout">
+          <!-- Admin Dashboard Tabs -->
+          <div class="admin-tabs">
+            <button type="button" class="admin-tab-btn active" data-tab="stats">Overview</button>
+            <button type="button" class="admin-tab-btn" data-tab="users">Users Management</button>
+            <button type="button" class="admin-tab-btn" data-tab="quotes">Custom Quotes</button>
+            <button type="button" class="admin-tab-btn" data-tab="settings">System Settings</button>
+          </div>
+
+          <!-- Stats Tab -->
+          <div id="admin-tab-stats" class="admin-tab-content">
+            <div class="admin-stats-grid">
+              <div class="stat-card glass-panel">
+                <div class="stat-header">
+                  <span class="stat-title">Total Users</span>
+                  <i data-lucide="users" class="stat-icon"></i>
+                </div>
+                <div class="stat-value" id="admin-stat-users">0</div>
+              </div>
+              <div class="stat-card glass-panel">
+                <div class="stat-header">
+                  <span class="stat-title">Total Focus Time</span>
+                  <i data-lucide="clock" class="stat-icon"></i>
+                </div>
+                <div class="stat-value" id="admin-stat-focus">0m</div>
+              </div>
+              <div class="stat-card glass-panel">
+                <div class="stat-header">
+                  <span class="stat-title">Tasks Completed</span>
+                  <i data-lucide="check-circle" class="stat-icon"></i>
+                </div>
+                <div class="stat-value" id="admin-stat-tasks">0%</div>
+              </div>
+              <div class="stat-card glass-panel">
+                <div class="stat-header">
+                  <span class="stat-title">Habits Completion</span>
+                  <i data-lucide="target" class="stat-icon"></i>
+                </div>
+                <div class="stat-value" id="admin-stat-goals">0%</div>
+              </div>
+            </div>
+            <div class="admin-welcome-stats glass-panel">
+              <h3>System Overview</h3>
+              <p>Monitor application utilization, track productivity statistics across the user base, and customize system settings.</p>
+            </div>
+          </div>
+
+          <!-- Users Management Tab -->
+          <div id="admin-tab-users" class="admin-tab-content hidden">
+            <div class="table-container glass-panel">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Created At</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-tbody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Custom Quotes Tab -->
+          <div id="admin-tab-quotes" class="admin-tab-content hidden">
+            <div class="quotes-admin-grid">
+              <!-- Add Quote Form -->
+              <div class="glass-panel add-quote-panel">
+                <h3>Add New Motivation Quote</h3>
+                <form id="admin-add-quote-form" class="admin-quote-form">
+                  <div class="form-group">
+                    <label for="admin-quote-text">Quote Text</label>
+                    <textarea id="admin-quote-text" class="glass-input" rows="3" placeholder="Enter inspiring quote..." required></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label for="admin-quote-author">Author</label>
+                    <input type="text" id="admin-quote-author" class="glass-input" placeholder="Enter author name" required>
+                  </div>
+                  <button type="submit" class="glass-btn primary-btn">
+                    <i data-lucide="plus"></i> Add Quote
+                  </button>
+                </form>
+              </div>
+              
+              <!-- Custom Quotes List -->
+              <div class="glass-panel quotes-list-panel">
+                <h3>Custom Admin Quotes</h3>
+                <div class="admin-quotes-list-wrapper">
+                  <ul id="admin-quotes-list" class="admin-quotes-list">
+                    <!-- Dynamically populated -->
+                  </ul>
+                  <div id="admin-quotes-empty" class="empty-state">
+                    <i data-lucide="quote"></i>
+                    <p>No custom quotes added yet.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Settings Tab -->
+          <div id="admin-tab-settings" class="admin-tab-content hidden">
+            <div class="settings-card glass-panel">
+              <h3>Global Configuration</h3>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-label">Allow Public Registration</span>
+                  <span class="setting-desc">Toggle whether new users can register accounts from the landing page.</span>
+                </div>
+                <div class="toggle-switch-container">
+                  <label class="switch">
+                    <input type="checkbox" id="admin-config-registration">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
