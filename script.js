@@ -1,42 +1,80 @@
-/* -------------------------------------------------------------
- * Aura - Premium Productivity Dashboard JavaScript
- * Modular structures for navigation, weather, todos, planner,
- * goals, pomodoro timer, and motivational quotes.
- * ------------------------------------------------------------- */
+// Global error logger for client diagnostics
+window.addEventListener('error', (event) => {
+  const token = localStorage.getItem('aura_token');
+  fetch('http://localhost:8080/api/log-error', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      error: event.error ? event.error.stack : null,
+      origin: window.location.href,
+      token: token ? 'exists' : 'null'
+    })
+  }).catch(() => {});
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize icons
   lucide.createIcons();
-  // --- Local Fallback Quotes Catalog ---
-  const localQuotes = [
-    { quote: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
-    { quote: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
-    { quote: "It always seems impossible until it's done.", author: "Nelson Mandela" },
-    { quote: "Productivity is being able to do things that you were never able to do before.", author: "Franz Kafka" },
-    { quote: "The way to get started is to quit talking and begin doing.", author: "Walt Disney" },
-    { quote: "Do not wait; the time will never be 'just right.'", author: "Napoleon Hill" },
-    { quote: "Action is the foundational key to all success.", author: "Pablo Picasso" },
-    { quote: "Your mind is for having ideas, not holding them.", author: "David Allen" },
-    { quote: "Amateurs sit and wait for inspiration, the rest of us just get up and go to work.", author: "Stephen King" },
-    { quote: "Done is better than perfect.", author: "Sheryl Sandberg" },
-    { quote: "Yesterday you said tomorrow. Just do it.", author: "Nike" },
-    { quote: "Concentrate all your thoughts upon the work at hand. The sun's rays do not burn until brought to a focus.", author: "Alexander Graham Bell" },
-    { quote: "Start where you are. Use what you have. Do what you can.", author: "Arthur Ashe" },
-    { quote: "You miss 100% of the shots you don't take.", author: "Wayne Gretzky" },
-    { quote: "Success is not final, failure is not fatal: it is the courage to continue that counts.", author: "Winston Churchill" },
-    { quote: "The best way to predict the future is to create it.", author: "Peter Drucker" },
-    { quote: "It is not that we have a short time to live, but that we waste a lot of it.", author: "Seneca" },
-    { quote: "Don't count the days, make the days count.", author: "Muhammad Ali" },
-    { quote: "Make each day your masterpiece.", author: "John Wooden" },
-    { quote: "Keep close to Nature's heart... and break clear away, once in a while, and climb a mountain or spend a week in the woods. Wash your spirit clean.", author: "John Muir" }
-  ];
+
+  // Determine API base dynamically (support VS Code Live Server on port 5500)
+  const API_BASE = window.location.port === '5500' ? 'http://localhost:8080' : '';
+
+  // --- API Client Layer ---
+  async function apiFetch(url, options = {}) {
+    const token = localStorage.getItem('aura_token');
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(API_BASE + url, { ...options, headers });
+    
+    if (response.status === 401 || response.status === 403) {
+      // Auto logout on token expiration/unauthorized access
+      if (localStorage.getItem('aura_token')) {
+        logout();
+      }
+    }
+    
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    return response.json();
+  }
+
   // --- Core State ---
   let state = {
-    todos: JSON.parse(localStorage.getItem('aura_todos')) || [],
-    planner: JSON.parse(localStorage.getItem('aura_planner')) || {},
-    goals: JSON.parse(localStorage.getItem('aura_goals')) || [],
+    todos: [],
+    planner: {},
+    goals: [],
     theme: localStorage.getItem('aura_theme') || 'dark',
-    currentQuote: null
+    currentQuote: null,
+    user: null
   };
+
+  // --- Auth UI Elements ---
+  const authContainer = document.getElementById('auth-container');
+  const appContainer = document.getElementById('app-container');
+  const loginForm = document.getElementById('login-form');
+  const registerForm = document.getElementById('register-form');
+  const showRegisterBtn = document.getElementById('show-register-btn');
+  const showLoginBtn = document.getElementById('show-login-btn');
+  const authErrorMsg = document.getElementById('auth-error-msg');
+  
+  // Header User Widgets
+  const userMenuWidget = document.getElementById('user-menu-widget');
+  const headerUsername = document.getElementById('header-username');
+  const adminPanelBtn = document.getElementById('admin-panel-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+
   // --- Theme Manager ---
   const themeToggleBtn = document.getElementById('theme-toggle');
   
@@ -51,34 +89,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
     applyTheme(nextTheme);
   });
-  // --- Time & Date Engine ---
+
+  // --- Clock Engine ---
   const timeText = document.getElementById('time-text');
   const dateText = document.getElementById('date-text');
   function updateClock() {
     const now = new Date();
     
-    // Format Time: HH:MM:SS AM/PM
     let hours = now.getHours();
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
-    hours = hours ? hours : 12; // The hour '0' should be '12'
+    hours = hours ? hours : 12; 
     const formattedHours = String(hours).padStart(2, '0');
     
     timeText.textContent = `${formattedHours}:${minutes}:${seconds} ${ampm}`;
-    // Format Date: Monday, July 6, 2026
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     dateText.textContent = now.toLocaleDateString('en-US', options);
-    // Dynamic Background triggers checking hourly
-    updateDynamicBackground(now.getHours());
     
-    // Highlight Current hour in planner
+    updateDynamicBackground(now.getHours());
     highlightPlannerCurrentHour(now.getHours());
   }
-  // Run Clock immediately & start interval
-  updateClock();
-  setInterval(updateClock, 1000);
+
+
   // --- Dynamic Background Manager ---
   let lastBackgroundClass = '';
   function updateDynamicBackground(hour) {
@@ -93,63 +127,207 @@ document.addEventListener('DOMContentLoaded', () => {
       backgroundClass = 'bg-night';
     }
     if (backgroundClass !== lastBackgroundClass) {
-      document.body.className = ''; // Reset all classes
+      document.body.className = ''; 
       document.body.classList.add(backgroundClass);
       lastBackgroundClass = backgroundClass;
     }
   }
+
+  // --- Authentication Management ---
+  async function checkAuth() {
+    const token = localStorage.getItem('aura_token');
+    if (!token) {
+      showAuthScreen();
+      return;
+    }
+    try {
+      const user = await apiFetch('/api/auth/me');
+      loginSuccess(user, token);
+    } catch (err) {
+      console.warn("Auth verify failed, clearing session: ", err);
+      logout();
+    }
+  }
+
+  function showAuthScreen() {
+    state.user = null;
+    appContainer.classList.add('hidden');
+    authContainer.classList.remove('hidden');
+    userMenuWidget.classList.add('hidden');
+    adminPanelBtn.classList.add('hidden');
+    authErrorMsg.textContent = '';
+  }
+
+  function loginSuccess(user, token) {
+    state.user = user;
+    localStorage.setItem('aura_token', token);
+    
+    // UI Update
+    authContainer.classList.add('hidden');
+    appContainer.classList.remove('hidden');
+    userMenuWidget.classList.remove('hidden');
+    headerUsername.textContent = user.username;
+    
+    if (user.role === 'admin') {
+      adminPanelBtn.classList.remove('hidden');
+    } else {
+      adminPanelBtn.classList.add('hidden');
+    }
+    
+    // Load app datasets
+    loadAllData();
+  }
+
+  function logout() {
+    localStorage.removeItem('aura_token');
+    state.user = null;
+    showAuthScreen();
+    // Return to dashboard home in router state
+    navigateTo('dashboard-home');
+  }
+
+  // Auth Forms Switchers
+  if (showRegisterBtn && loginForm && registerForm && authErrorMsg) {
+    showRegisterBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      loginForm.classList.add('hidden');
+      registerForm.classList.remove('hidden');
+      authErrorMsg.textContent = '';
+    });
+  }
+
+  if (showLoginBtn && loginForm && registerForm && authErrorMsg) {
+    showLoginBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      registerForm.classList.add('hidden');
+      loginForm.classList.remove('hidden');
+      authErrorMsg.textContent = '';
+    });
+  }
+
+  // Login Submit
+  if (loginForm && authErrorMsg) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authErrorMsg.textContent = '';
+      const userEl = document.getElementById('login-username');
+      const passEl = document.getElementById('login-password');
+      if (!userEl || !passEl) return;
+      const username = userEl.value.trim();
+      const password = passEl.value;
+      
+      try {
+        const data = await apiFetch('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username, password })
+        });
+        loginSuccess(data.user, data.token);
+      } catch (err) {
+        authErrorMsg.textContent = err.message || 'Login failed';
+      }
+    });
+  }
+
+  // Register Submit
+  if (registerForm && authErrorMsg) {
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authErrorMsg.textContent = '';
+      const userEl = document.getElementById('register-username');
+      const passEl = document.getElementById('register-password');
+      if (!userEl || !passEl) return;
+      const username = userEl.value.trim();
+      const password = passEl.value;
+
+      try {
+        const data = await apiFetch('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ username, password })
+        });
+        loginSuccess(data.user, data.token);
+      } catch (err) {
+        authErrorMsg.textContent = err.message || 'Registration failed';
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', logout);
+  }
+
   // --- Navigation Router ---
   const activeViews = document.querySelectorAll('.view-section');
   const clickableCards = document.querySelectorAll('.clickable-card');
   const backButtons = document.querySelectorAll('.back-btn');
+
   function navigateTo(targetId) {
     const currentActive = document.querySelector('.view-section.active');
     const targetSection = document.getElementById(targetId);
     
     if (currentActive && targetSection && currentActive !== targetSection) {
-      // Fade out current
       currentActive.style.opacity = '0';
       currentActive.style.transform = 'translateY(12px)';
       
       setTimeout(() => {
         currentActive.classList.remove('active');
+        currentActive.style.display = 'none';
         
-        // Setup target before fade in
         targetSection.classList.add('active');
         targetSection.style.display = 'block';
+        
+        // Reset scroll position on view shift
+        window.scrollTo({ top: 0, behavior: 'instant' });
         
         // Force reflow
         targetSection.offsetHeight;
         
-        // Fade in target
         targetSection.style.opacity = '1';
         targetSection.style.transform = 'translateY(0)';
         
-        // If navigation target requires custom hook, execute it
+        // Route Hooks
         if (targetId === 'planner-section') {
           scrollToCurrentPlannerHour();
+        } else if (targetId === 'admin-section') {
+          loadAdminStats();
+          loadAdminTab('stats');
         }
       }, 250);
     }
   }
-  // Card triggers
+
+  // Dashboard grid cards routing triggers
   clickableCards.forEach(card => {
     card.addEventListener('click', () => {
       const targetFeature = card.getAttribute('data-target');
       navigateTo(`${targetFeature}-section`);
     });
   });
+
   // Back button triggers
   backButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Avoid double click issues
+      e.stopPropagation();
       navigateTo('dashboard-home');
-      // Refresh status indicators on home screen when returning
-      updateTodoStatusSublabel();
-      updatePlannerStatusSublabel();
-      updateGoalsProgress();
+      syncDashboardSublabels();
     });
   });
+
+  adminPanelBtn.addEventListener('click', () => {
+    navigateTo('admin-section');
+  });
+
+  document.getElementById('admin-back-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    navigateTo('dashboard-home');
+    syncDashboardSublabels();
+  });
+
+  function syncDashboardSublabels() {
+    updateTodoStatusSublabel();
+    updatePlannerStatusSublabel();
+    updateGoalsProgress();
+  }
+
   // --- Weather Widget Module ---
   const weatherLoading = document.getElementById('weather-loading');
   const weatherContent = document.getElementById('weather-content');
@@ -157,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const weatherCity = document.getElementById('weather-city');
   const weatherDesc = document.getElementById('weather-desc');
   const weatherIconContainer = document.getElementById('weather-icon-container');
-  // WMO Code Translation Map
+
   const weatherCodes = {
     0: { desc: "Clear sky", icon: "sun" },
     1: { desc: "Mainly clear", icon: "cloud-sun" },
@@ -188,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     96: { desc: "Thunderstorm with slight hail", icon: "cloud-lightning" },
     99: { desc: "Thunderstorm with heavy hail", icon: "cloud-lightning" }
   };
+
   function fetchWeather(lat, lon, cityName = "Current Location") {
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
     
@@ -202,11 +381,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const temp = Math.round(current.temperature);
         const code = current.weathercode;
         const mapped = weatherCodes[code] || { desc: "Unknown", icon: "cloud" };
-        // Update DOM
+
         weatherTemp.textContent = `${temp}°C`;
         weatherCity.textContent = cityName;
         weatherDesc.textContent = mapped.desc;
-        
         weatherIconContainer.innerHTML = `<i data-lucide="${mapped.icon}"></i>`;
         
         weatherLoading.classList.add('hidden');
@@ -215,7 +393,6 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch(err => {
         console.error("Weather fetch error: ", err);
-        // Fallback info display
         weatherTemp.textContent = "--°C";
         weatherCity.textContent = "Offline/API Error";
         weatherDesc.textContent = "Unable to fetch";
@@ -225,8 +402,8 @@ document.addEventListener('DOMContentLoaded', () => {
         lucide.createIcons();
       });
   }
+
   function reverseGeocodeAndFetchWeather(lat, lon) {
-    // Attempt reverse geocoding via OpenStreetMap Nominatim
     const geocodeUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
     
     fetch(geocodeUrl, { headers: { 'User-Agent': 'AuraDashboardApp/1.0' } })
@@ -239,10 +416,10 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchWeather(lat, lon, city);
       })
       .catch(() => {
-        // Fallback to coordinates format as city name
         fetchWeather(lat, lon, "Local Area");
       });
   }
+
   function initializeWeather() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -252,18 +429,40 @@ document.addEventListener('DOMContentLoaded', () => {
           reverseGeocodeAndFetchWeather(lat, lon);
         },
         (error) => {
-          console.warn("Geolocation denied or failed. Loading London, UK as default: ", error);
-          // Fallback to London, UK
+          console.warn("Geolocation denied/failed. Defaulting to London:", error);
           fetchWeather(51.5074, -0.1278, "London");
         },
         { timeout: 8000 }
       );
     } else {
-      // Browser doesn't support geolocation
       fetchWeather(51.5074, -0.1278, "London");
     }
   }
   initializeWeather();
+
+  // --- Load Data Pipeline ---
+  async function loadAllData() {
+    try {
+      // Run concurrent requests for todos, planner, goals, and quote
+      const [todos, planner, goals] = await Promise.all([
+        apiFetch('/api/todos'),
+        apiFetch('/api/planner'),
+        apiFetch('/api/goals')
+      ]);
+
+      state.todos = todos;
+      state.planner = planner;
+      state.goals = goals;
+
+      renderTodos();
+      renderPlanner();
+      renderGoals();
+      fetchNewQuote(); // fetch random quote from server database
+    } catch (err) {
+      console.error("Error loading profile dataset: ", err);
+    }
+  }
+
   // --- Todo List Module ---
   const todoForm = document.getElementById('todo-form');
   const todoInput = document.getElementById('todo-input');
@@ -271,31 +470,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const todoEmptyState = document.getElementById('todo-empty-state');
   const todoFilters = document.querySelectorAll('.todo-filters .filter-btn');
   let currentTodoFilter = 'all';
-  todoForm.addEventListener('submit', (e) => {
+
+  todoForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = todoInput.value.trim();
     if (!text) return;
-    const newTodo = {
-      id: Date.now(),
-      text: text,
-      completed: false,
-      important: false
-    };
-    state.todos.push(newTodo);
-    saveTodos();
-    renderTodos();
-    todoInput.value = '';
-    todoInput.focus();
+    
+    try {
+      const todo = await apiFetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify({ text, important: false })
+      });
+      state.todos.push(todo);
+      renderTodos();
+      todoInput.value = '';
+      todoInput.focus();
+    } catch (err) {
+      alert("Failed to add task: " + err.message);
+    }
   });
-  function saveTodos() {
-    localStorage.setItem('aura_todos', JSON.stringify(state.todos));
-    updateTodoStatusSublabel();
-  }
+
   function updateTodoStatusSublabel() {
     const remainingCount = state.todos.filter(t => !t.completed).length;
     document.getElementById('todo-card-status').innerHTML = `<span>${remainingCount} tasks remaining</span>`;
   }
-  // Filter Buttons
+
   todoFilters.forEach(btn => {
     btn.addEventListener('click', () => {
       todoFilters.forEach(f => f.classList.remove('active'));
@@ -304,37 +503,57 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTodos();
     });
   });
-  // Event Delegation for List actions
-  todoList.addEventListener('click', (e) => {
+
+  todoList.addEventListener('click', async (e) => {
     const target = e.target;
     const taskItem = target.closest('.task-item');
     if (!taskItem) return;
-    const todoId = parseInt(taskItem.getAttribute('data-id'));
-    // Find the matching todo in state
+    const todoId = taskItem.getAttribute('data-id');
     const todoIndex = state.todos.findIndex(t => t.id === todoId);
     if (todoIndex === -1) return;
+
+    const todo = state.todos[todoIndex];
+
     if (target.closest('.checkbox-custom')) {
-      // Toggle complete
-      state.todos[todoIndex].completed = !state.todos[todoIndex].completed;
-      saveTodos();
-      renderTodos();
+      // Toggle Complete
+      try {
+        const updated = await apiFetch(`/api/todos/${todoId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ completed: !todo.completed })
+        });
+        state.todos[todoIndex] = updated;
+        renderTodos();
+      } catch (err) {
+        alert("Failed to update task: " + err.message);
+      }
     } else if (target.closest('.star-btn')) {
-      // Toggle important
-      state.todos[todoIndex].important = !state.todos[todoIndex].important;
-      saveTodos();
-      renderTodos();
+      // Toggle Important
+      try {
+        const updated = await apiFetch(`/api/todos/${todoId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ important: !todo.important })
+        });
+        state.todos[todoIndex] = updated;
+        renderTodos();
+      } catch (err) {
+        alert("Failed to update task: " + err.message);
+      }
     } else if (target.closest('.delete-btn')) {
-      // Delete todo
-      state.todos.splice(todoIndex, 1);
-      saveTodos();
-      renderTodos();
+      // Delete task
+      try {
+        await apiFetch(`/api/todos/${todoId}`, { method: 'DELETE' });
+        state.todos.splice(todoIndex, 1);
+        renderTodos();
+      } catch (err) {
+        alert("Failed to delete task: " + err.message);
+      }
     }
   });
+
   function renderTodos() {
     todoList.innerHTML = '';
-    
-    // Filter logic
     let filtered = state.todos;
+    
     if (currentTodoFilter === 'active') {
       filtered = state.todos.filter(t => !t.completed);
     } else if (currentTodoFilter === 'important') {
@@ -342,13 +561,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (currentTodoFilter === 'completed') {
       filtered = state.todos.filter(t => t.completed);
     }
+    
     if (filtered.length === 0) {
       todoEmptyState.classList.remove('hidden');
       todoList.classList.add('hidden');
     } else {
       todoEmptyState.classList.add('hidden');
       todoList.classList.remove('hidden');
-      // Sort: important tasks first, completed tasks last
+      
       const sorted = [...filtered].sort((a, b) => {
         if (a.completed !== b.completed) {
           return a.completed ? 1 : -1;
@@ -356,8 +576,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (a.important !== b.important) {
           return a.important ? -1 : 1;
         }
-        return b.id - a.id;
+        return new Date(b.createdAt) - new Date(a.createdAt);
       });
+      
       sorted.forEach(todo => {
         const li = document.createElement('li');
         li.className = `task-item ${todo.completed ? 'completed' : ''} ${todo.important ? 'important' : ''}`;
@@ -384,20 +605,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateTodoStatusSublabel();
   }
-  // HTML escape helper
+
   function escapeHtml(str) {
+    if (!str) return '';
     return str.replace(/&/g, "&amp;")
               .replace(/</g, "&lt;")
               .replace(/>/g, "&gt;")
               .replace(/"/g, "&quot;")
               .replace(/'/g, "&#039;");
   }
-  // Initial Todo Render
-  renderTodos();
+
   // --- Daily Planner Module ---
   const plannerTimetable = document.getElementById('planner-timetable');
-  
-  // Schedule Hours configuration (8 AM to 9 PM)
   const plannerHours = [
     { label: "08:00 AM", hour24: 8 },
     { label: "09:00 AM", hour24: 9 },
@@ -414,6 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { label: "08:00 PM", hour24: 20 },
     { label: "09:00 PM", hour24: 21 }
   ];
+
   function renderPlanner() {
     plannerTimetable.innerHTML = '';
     
@@ -440,47 +660,76 @@ document.addEventListener('DOMContentLoaded', () => {
     attachPlannerListeners();
     updatePlannerStatusSublabel();
   }
+
+  let plannerSaveTimeout = null;
   function attachPlannerListeners() {
     const textareas = plannerTimetable.querySelectorAll('.planner-input');
     
     textareas.forEach(textarea => {
-      // Auto-resize height on input
       autoResizeTextarea(textarea);
       textarea.addEventListener('input', () => {
         autoResizeTextarea(textarea);
-        savePlannerSlot(textarea);
+        
+        // Debounce database save (300ms)
+        clearTimeout(plannerSaveTimeout);
+        plannerSaveTimeout = setTimeout(() => {
+          savePlannerSlot(textarea);
+        }, 300);
       });
-      // Blur save
+      
       textarea.addEventListener('blur', () => {
         savePlannerSlot(textarea);
       });
     });
-    // Clear slot handler
-    plannerTimetable.addEventListener('click', (e) => {
+
+    plannerTimetable.addEventListener('click', async (e) => {
       const clearBtn = e.target.closest('.clear-slot-btn');
       if (!clearBtn) return;
       const slot = clearBtn.closest('.planner-slot');
       const label = slot.getAttribute('data-label');
       const textarea = slot.querySelector('.planner-input');
+      
       textarea.value = '';
       autoResizeTextarea(textarea);
       state.planner[label] = '';
-      localStorage.setItem('aura_planner', JSON.stringify(state.planner));
-      updatePlannerStatusSublabel();
+      
+      try {
+        await apiFetch('/api/planner', {
+          method: 'POST',
+          body: JSON.stringify({ label, text: '' })
+        });
+        updatePlannerStatusSublabel();
+      } catch (err) {
+        console.error("Failed to clear planner slot:", err);
+      }
     });
   }
+
   function autoResizeTextarea(el) {
     el.style.height = 'auto';
     el.style.height = (el.scrollHeight) + 'px';
   }
-  function savePlannerSlot(textarea) {
+
+  async function savePlannerSlot(textarea) {
     const slot = textarea.closest('.planner-slot');
+    if (!slot) return;
     const label = slot.getAttribute('data-label');
     const text = textarea.value.trim();
+    
+    if (state.planner[label] === text) return; // avoid duplicate calls
     state.planner[label] = text;
-    localStorage.setItem('aura_planner', JSON.stringify(state.planner));
-    updatePlannerStatusSublabel();
+    
+    try {
+      await apiFetch('/api/planner', {
+        method: 'POST',
+        body: JSON.stringify({ label, text })
+      });
+      updatePlannerStatusSublabel();
+    } catch (err) {
+      console.error("Failed to save planner slot:", err);
+    }
   }
+
   function highlightPlannerCurrentHour(currentHour24) {
     const slots = plannerTimetable.querySelectorAll('.planner-slot');
     slots.forEach(slot => {
@@ -492,18 +741,19 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
   function scrollToCurrentPlannerHour() {
     const current = plannerTimetable.querySelector('.planner-slot.current-hour');
     if (current) {
       current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
+
   function updatePlannerStatusSublabel() {
     const filledSlotsCount = Object.values(state.planner).filter(text => text && text.trim().length > 0).length;
-    document.getElementById('planner-card-status').innerHTML = `<span>${filledSlotsCount} time blocks scheduled</span>`;
+    document.getElementById('planner-card-status').innerHTML = `<span>${filledSlotsCount} slots filled</span>`;
   }
-  // Initial render
-  renderPlanner();
+
   // --- Daily Goals Module ---
   const goalsForm = document.getElementById('goals-form');
   const goalInput = document.getElementById('goal-input');
@@ -514,52 +764,69 @@ document.addEventListener('DOMContentLoaded', () => {
   const goalsProgressFillLarge = document.getElementById('goals-progress-fill-large');
   const goalsProgressText = document.getElementById('goals-progress-text');
   const goalsCardStatus = document.getElementById('goals-card-status');
-  goalsForm.addEventListener('submit', (e) => {
+
+  goalsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = goalInput.value.trim();
     if (!text) return;
-    const newGoal = {
-      id: Date.now(),
-      text: text,
-      completed: false
-    };
-    state.goals.push(newGoal);
-    saveGoals();
-    renderGoals();
-    goalInput.value = '';
-    goalInput.focus();
+    
+    try {
+      const goal = await apiFetch('/api/goals', {
+        method: 'POST',
+        body: JSON.stringify({ text })
+      });
+      state.goals.push(goal);
+      renderGoals();
+      goalInput.value = '';
+      goalInput.focus();
+    } catch (err) {
+      alert("Failed to add goal: " + err.message);
+    }
   });
-  function saveGoals() {
-    localStorage.setItem('aura_goals', JSON.stringify(state.goals));
-    updateGoalsProgress();
-  }
+
   function updateGoalsProgress() {
     const total = state.goals.length;
     const completed = state.goals.filter(g => g.completed).length;
     const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
-    // Update progress bars & text
+
     goalsProgressFill.style.width = `${percentage}%`;
     goalsProgressFillLarge.style.width = `${percentage}%`;
     goalsProgressText.textContent = `${completed} of ${total} completed`;
     goalsCardStatus.innerHTML = `<span>${percentage}% completed</span>`;
   }
-  goalsList.addEventListener('click', (e) => {
+
+  goalsList.addEventListener('click', async (e) => {
     const target = e.target;
     const item = target.closest('.task-item');
     if (!item) return;
-    const goalId = parseInt(item.getAttribute('data-id'));
+    const goalId = item.getAttribute('data-id');
     const index = state.goals.findIndex(g => g.id === goalId);
     if (index === -1) return;
+
+    const goal = state.goals[index];
+
     if (target.closest('.checkbox-custom')) {
-      state.goals[index].completed = !state.goals[index].completed;
-      saveGoals();
-      renderGoals();
+      try {
+        const updated = await apiFetch(`/api/goals/${goalId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ completed: !goal.completed })
+        });
+        state.goals[index] = updated;
+        renderGoals();
+      } catch (err) {
+        alert("Failed to update goal: " + err.message);
+      }
     } else if (target.closest('.delete-btn')) {
-      state.goals.splice(index, 1);
-      saveGoals();
-      renderGoals();
+      try {
+        await apiFetch(`/api/goals/${goalId}`, { method: 'DELETE' });
+        state.goals.splice(index, 1);
+        renderGoals();
+      } catch (err) {
+        alert("Failed to delete goal: " + err.message);
+      }
     }
   });
+
   function renderGoals() {
     goalsList.innerHTML = '';
     if (state.goals.length === 0) {
@@ -591,16 +858,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateGoalsProgress();
   }
-  // Initial Render
-  renderGoals();
+
   // --- Pomodoro Timer Module ---
   let pomodoro = {
-    timeLeft: 1500, // 25 mins in seconds
+    timeLeft: 1500, 
     duration: 1500,
     intervalId: null,
     isRunning: false,
-    type: 'work' // 'work', 'break', 'long-break'
+    type: 'work' 
   };
+
   const timerTimeDisplay = document.getElementById('timer-time-display');
   const timerStartBtn = document.getElementById('timer-start');
   const timerPauseBtn = document.getElementById('timer-pause');
@@ -609,29 +876,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const timerSessionType = document.getElementById('timer-session-type');
   const pomodoroCardStatus = document.getElementById('pomodoro-card-status');
   const timerPresetButtons = document.querySelectorAll('.timer-presets .preset-btn');
-  // Circ = 2 * PI * r = 2 * PI * 45 = 282.74 ≈ 283
+  
   const ringCircumference = 283;
   timerProgressRing.style.strokeDasharray = ringCircumference;
+
   function updateTimerDisplay() {
     const mins = Math.floor(pomodoro.timeLeft / 60);
     const secs = pomodoro.timeLeft % 60;
     const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     
-    // Update main clock text
     timerTimeDisplay.textContent = formatted;
-    // Update SVG progress ring
+    
     const percentRemaining = pomodoro.timeLeft / pomodoro.duration;
     const offset = ringCircumference - (percentRemaining * ringCircumference);
     timerProgressRing.style.strokeDashoffset = offset;
-    // Update dashboard state status
+    
     const badgeText = pomodoro.type === 'work' ? 'Focus Session' : 'Break Time';
     pomodoroCardStatus.innerHTML = `<span>${badgeText} (${formatted})</span>`;
   }
+
   function startTimer() {
     if (pomodoro.isRunning) return;
     pomodoro.isRunning = true;
     timerStartBtn.classList.add('hidden');
     timerPauseBtn.classList.remove('hidden');
+    
     pomodoro.intervalId = setInterval(() => {
       pomodoro.timeLeft--;
       updateTimerDisplay();
@@ -646,6 +915,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 1000);
   }
+
   function pauseTimer() {
     if (!pomodoro.isRunning) return;
     clearInterval(pomodoro.intervalId);
@@ -653,12 +923,12 @@ document.addEventListener('DOMContentLoaded', () => {
     timerStartBtn.classList.remove('hidden');
     timerPauseBtn.classList.add('hidden');
     
-    // Update card label to "Paused"
     const mins = Math.floor(pomodoro.timeLeft / 60);
     const secs = pomodoro.timeLeft % 60;
     const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     pomodoroCardStatus.innerHTML = `<span>Paused (${formatted})</span>`;
   }
+
   function resetTimer() {
     clearInterval(pomodoro.intervalId);
     pomodoro.isRunning = false;
@@ -669,13 +939,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     updateTimerDisplay();
   }
+
   function setTimerPreset(durationSeconds, sessionType) {
     clearInterval(pomodoro.intervalId);
     pomodoro.isRunning = false;
     pomodoro.duration = durationSeconds;
     pomodoro.timeLeft = durationSeconds;
     pomodoro.type = sessionType;
-    // Style updates
+
     timerSessionType.textContent = sessionType === 'work' ? 'Work Session' : 
                                    sessionType === 'break' ? 'Short Break' : 'Long Break';
     
@@ -684,35 +955,48 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       timerSessionType.className = 'timer-session-badge break';
     }
+    
     timerStartBtn.classList.remove('hidden');
     timerPauseBtn.classList.add('hidden');
     updateTimerDisplay();
   }
-  function handleSessionEnd() {
+
+  async function handleSessionEnd() {
+    // Log the focus session to the database!
+    try {
+      await apiFetch('/api/focus-sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          duration: pomodoro.duration,
+          type: pomodoro.type
+        })
+      });
+    } catch (err) {
+      console.error("Failed to log focus session to backend stats: ", err);
+    }
+
     const alertMessage = pomodoro.type === 'work' 
       ? "Work session complete! Time to take a well-deserved break." 
       : "Break is over! Prepare to refocus on your goals.";
     alert(alertMessage);
-    // Auto toggle to next recommended state (don't start automatically, let user click play)
+
+    // Auto toggle preset
     if (pomodoro.type === 'work') {
-      // Switch to short break
       timerPresetButtons.forEach(btn => btn.classList.remove('active'));
       const breakBtn = document.querySelector('[data-type="break"]');
       if (breakBtn) breakBtn.classList.add('active');
       setTimerPreset(300, 'break');
     } else {
-      // Switch back to work
       timerPresetButtons.forEach(btn => btn.classList.remove('active'));
       const workBtn = document.querySelector('[data-type="work"]');
       if (workBtn) workBtn.classList.add('active');
       setTimerPreset(1500, 'work');
     }
   }
-  // Synthetic beep sound via browser Web Audio API
+
   function playTimerAlarm() {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      
       const playBeep = (freq, startTime, duration) => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -728,19 +1012,18 @@ document.addEventListener('DOMContentLoaded', () => {
         osc.start(startTime);
         osc.stop(startTime + duration);
       };
-      // Play dual chime: high-pitch sweet ring
       const now = audioCtx.currentTime;
       playBeep(987.77, now, 0.25); // B5
       playBeep(1318.51, now + 0.3, 0.4); // E6
     } catch (e) {
-      console.warn("Audio alarm playback blocked/unsupported: ", e);
+      console.warn("Audio alarm playback blocked/unsupported:", e);
     }
   }
-  // Setup control listeners
+
   timerStartBtn.addEventListener('click', startTimer);
   timerPauseBtn.addEventListener('click', pauseTimer);
   timerResetBtn.addEventListener('click', resetTimer);
-  // Setup presets
+
   timerPresetButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       timerPresetButtons.forEach(b => b.classList.remove('active'));
@@ -750,8 +1033,9 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimerPreset(dur, type);
     });
   });
-  // Initial Pomodoro timer setup
+
   updateTimerDisplay();
+
   // --- Motivation Quotes Module ---
   const quotePreview = document.getElementById('quote-preview');
   const quoteFullText = document.getElementById('quote-full-text');
@@ -759,38 +1043,266 @@ document.addEventListener('DOMContentLoaded', () => {
   const quoteLoader = document.getElementById('quote-loader');
   const quoteContentWrapper = document.getElementById('quote-content-wrapper');
   const newQuoteBtn = document.getElementById('new-quote-btn');
+
   function renderQuote(quoteObj) {
     state.currentQuote = quoteObj;
-    
-    // Update preview card
     quotePreview.textContent = `"${quoteObj.quote}"`;
-    // Update full details in Quotes overlay view
     quoteFullText.textContent = quoteObj.quote;
     quoteFullAuthor.textContent = `— ${quoteObj.author}`;
     
     quoteLoader.classList.add('hidden');
     quoteContentWrapper.classList.remove('hidden');
   }
+
   function fetchNewQuote() {
     quoteLoader.classList.remove('hidden');
     quoteContentWrapper.classList.add('hidden');
-    // Fetch random quote via DummyJSON API (very fast, supports CORS)
-    fetch('https://dummyjson.com/quotes/random')
-      .then(res => {
-        if (!res.ok) throw new Error("API failed");
-        return res.json();
-      })
+    
+    apiFetch('/api/quotes/random')
       .then(data => {
-        renderQuote({ quote: data.quote, author: data.author });
+        renderQuote(data);
       })
       .catch(err => {
-        console.warn("Could not fetch quote from API, using fallback: ", err);
-        // Choose random from fallback local list
-        const randIndex = Math.floor(Math.random() * localQuotes.length);
-        renderQuote(localQuotes[randIndex]);
+        console.warn("Failed to load quote, showing generic: ", err);
+        renderQuote({ quote: "Form follows focus.", author: "Aura System" });
       });
   }
+
   newQuoteBtn.addEventListener('click', fetchNewQuote);
-  // Load first quote on boot
-  fetchNewQuote();
+
+  // --- Admin Console Interface Module ---
+  const adminTabButtons = document.querySelectorAll('.admin-tab-btn');
+  const adminTabContents = document.querySelectorAll('.admin-tab-content');
+
+  adminTabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.getAttribute('data-tab');
+      loadAdminTab(tabId);
+    });
+  });
+
+  function loadAdminTab(tabId) {
+    adminTabButtons.forEach(b => {
+      if (b.getAttribute('data-tab') === tabId) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+
+    adminTabContents.forEach(content => {
+      if (content.id === `admin-tab-${tabId}`) {
+        content.classList.remove('hidden');
+      } else {
+        content.classList.add('hidden');
+      }
+    });
+
+    // Fetch tab specific datasets
+    if (tabId === 'stats') {
+      loadAdminStats();
+    } else if (tabId === 'users') {
+      loadAdminUsers();
+    } else if (tabId === 'quotes') {
+      loadAdminCustomQuotes();
+    } else if (tabId === 'settings') {
+      loadAdminSettings();
+    }
+  }
+
+  // 1. Load Overview Metrics
+  async function loadAdminStats() {
+    try {
+      const stats = await apiFetch('/api/admin/stats');
+      document.getElementById('admin-stat-users').textContent = stats.totalUsers;
+      document.getElementById('admin-stat-focus').textContent = `${stats.totalFocusMinutes}m`;
+      document.getElementById('admin-stat-tasks').textContent = `${stats.completionRate}%`;
+      document.getElementById('admin-stat-goals').textContent = `${stats.goalCompletionRate}%`;
+    } catch (err) {
+      console.error("Failed to load admin stats dashboard: ", err);
+    }
+  }
+
+  // 2. Users Management
+  const adminUsersTbody = document.getElementById('admin-users-tbody');
+  async function loadAdminUsers() {
+    try {
+      const users = await apiFetch('/api/admin/users');
+      adminUsersTbody.innerHTML = '';
+      
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        const roleLabel = u.role === 'admin' ? 'Administrator' : 'User';
+        const dateFormatted = new Date(u.createdAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+
+        // Hide delete/promote operations on the root seed admin u_admin
+        const isRootAdmin = u.id === 'u_admin';
+        const actionHtml = isRootAdmin 
+          ? `<span class="text-muted" style="font-size: 0.85rem;">System Owner</span>` 
+          : `
+            <div class="table-actions-cell">
+              <button class="glass-btn table-action-btn role-toggle-btn" data-id="${u.id}" data-role="${u.role}">
+                Toggle Role
+              </button>
+              <button class="glass-btn table-action-btn delete-btn user-delete-btn" data-id="${u.id}" style="color: var(--danger-color); border-color: rgba(239, 68, 68, 0.2);">
+                Delete
+              </button>
+            </div>
+          `;
+
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(u.username)}</strong></td>
+          <td><span class="role-badge ${u.role}">${roleLabel}</span></td>
+          <td>${dateFormatted}</td>
+          <td>${actionHtml}</td>
+        `;
+        adminUsersTbody.appendChild(tr);
+      });
+      attachAdminUserActions();
+    } catch (err) {
+      console.error("Failed to load user records: ", err);
+    }
+  }
+
+  function attachAdminUserActions() {
+    // Toggle role button handlers
+    adminUsersTbody.querySelectorAll('.role-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const userId = btn.getAttribute('data-id');
+        const currentRole = btn.getAttribute('data-role');
+        const nextRole = currentRole === 'admin' ? 'user' : 'admin';
+        
+        try {
+          await apiFetch(`/api/admin/users/${userId}/role`, {
+            method: 'PUT',
+            body: JSON.stringify({ role: nextRole })
+          });
+          loadAdminUsers();
+        } catch (err) {
+          alert("Error updating user role: " + err.message);
+        }
+      });
+    });
+
+    // Delete user button handlers
+    adminUsersTbody.querySelectorAll('.user-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const userId = btn.getAttribute('data-id');
+        if (!confirm("Are you sure you want to permanently delete this user and all associated productivity data? This action is irreversible.")) {
+          return;
+        }
+        try {
+          await apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+          loadAdminUsers();
+        } catch (err) {
+          alert("Error deleting user: " + err.message);
+        }
+      });
+    });
+  }
+
+  // 3. Custom Quotes Management
+  const adminQuotesList = document.getElementById('admin-quotes-list');
+  const adminQuotesEmpty = document.getElementById('admin-quotes-empty');
+  const adminAddQuoteForm = document.getElementById('admin-add-quote-form');
+
+  async function loadAdminCustomQuotes() {
+    try {
+      const customQuotes = await apiFetch('/api/admin/quotes');
+      adminQuotesList.innerHTML = '';
+      
+      if (customQuotes.length === 0) {
+        adminQuotesEmpty.classList.remove('hidden');
+        adminQuotesList.classList.add('hidden');
+      } else {
+        adminQuotesEmpty.classList.add('hidden');
+        adminQuotesList.classList.remove('hidden');
+        
+        customQuotes.forEach(q => {
+          const li = document.createElement('li');
+          li.className = 'admin-quote-item';
+          li.innerHTML = `
+            <div class="admin-quote-item-content">
+              <span class="admin-quote-item-text">"${escapeHtml(q.quote)}"</span>
+              <span class="admin-quote-item-author">— ${escapeHtml(q.author)}</span>
+            </div>
+            <button class="action-btn delete-btn quote-delete-btn" data-id="${q.id}" aria-label="Delete Quote">
+              <i data-lucide="trash-2"></i>
+            </button>
+          `;
+          adminQuotesList.appendChild(li);
+        });
+        lucide.createIcons();
+        attachAdminQuoteActions();
+      }
+    } catch (err) {
+      console.error("Failed to load admin custom quotes list:", err);
+    }
+  }
+
+  function attachAdminQuoteActions() {
+    adminQuotesList.querySelectorAll('.quote-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const quoteId = btn.getAttribute('data-id');
+        try {
+          await apiFetch(`/api/admin/quotes/${quoteId}`, { method: 'DELETE' });
+          loadAdminCustomQuotes();
+        } catch (err) {
+          alert("Failed to delete quote: " + err.message);
+        }
+      });
+    });
+  }
+
+  adminAddQuoteForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const quote = document.getElementById('admin-quote-text').value.trim();
+    const author = document.getElementById('admin-quote-author').value.trim();
+
+    try {
+      await apiFetch('/api/admin/quotes', {
+        method: 'POST',
+        body: JSON.stringify({ quote, author })
+      });
+      document.getElementById('admin-quote-text').value = '';
+      document.getElementById('admin-quote-author').value = '';
+      loadAdminCustomQuotes();
+    } catch (err) {
+      alert("Failed to add custom quote: " + err.message);
+    }
+  });
+
+  // 4. System Settings
+  const adminConfigRegistration = document.getElementById('admin-config-registration');
+  async function loadAdminSettings() {
+    try {
+      const config = await apiFetch('/api/admin/config');
+      adminConfigRegistration.checked = config.registrationEnabled;
+    } catch (err) {
+      console.error("Failed to load registration toggle setting: ", err);
+    }
+  }
+
+  adminConfigRegistration.addEventListener('change', async () => {
+    const registrationEnabled = adminConfigRegistration.checked;
+    try {
+      await apiFetch('/api/admin/config', {
+        method: 'PUT',
+        body: JSON.stringify({ registrationEnabled })
+      });
+    } catch (err) {
+      alert("Failed to update registration settings: " + err.message);
+      // Revert checked state
+      adminConfigRegistration.checked = !registrationEnabled;
+    }
+  });
+
+  // Start Clock and Auth Flow Check on App Boot
+  updateClock();
+  setInterval(updateClock, 1000);
+  checkAuth();
 });
